@@ -1,0 +1,11 @@
+{
+  "name": "token-watcher",
+  "owner": { "name": "Sayem Pasha" },
+  "plugins": [
+    {
+      "name": "token-watcher",
+      "source": "./",
+      "description": "Tracks token usage against a budget you set, with warnings at 20% and 5% remaining"
+    }
+  ]
+}
