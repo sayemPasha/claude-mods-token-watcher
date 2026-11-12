@@ -20,13 +20,13 @@ No build step and no dependencies. Pick one.
 claude plugin install token-watcher --marketplace /path/to/claude-mods-token-watcher
 ```
 
-**From GitHub**, once the folder is pushed to a repository:
+**From GitHub** (recommended):
 
 ```
-claude plugin install token-watcher --marketplace <owner>/<repo>
+claude plugin install token-watcher --marketplace sayemPasha/claude-mods-token-watcher
 ```
 
-The same line works at the prompt of a terminal session as `/plugin install token-watcher --marketplace <owner>/<repo>`. In the desktop app: click + next to the prompt box, then Plugins, Add marketplace, then Add plugin.
+The same line works at the prompt of a terminal session as `/plugin install token-watcher --marketplace sayemPasha/claude-mods-token-watcher`. To get a newer version later, run `claude plugin update token-watcher`. In the desktop app: click + next to the prompt box, then Plugins, Add marketplace, then Add plugin.
 
 **Without installing**, add the folder to `CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json`:
 
