@@ -116,6 +116,18 @@ export const COUNTING_LABELS: Record<Counting, string> = {
   io: 'Input + output only',
 }
 
+/**
+ * Rough weekly budgets for Claude subscriptions, counted as all tokens except cache reads.
+ * Measured on Max ($100) with Opus 5.5 at medium effort: 1% of the 5-hour window came to about
+ * 1.15M tokens (about 2.5% of them not cache reads), and the weekly limit to about seven 5-hour
+ * windows, so about 20M a week. Pro is a fifth of Max. Sonnet goes about twice as far, Fable
+ * about half as far.
+ */
+export const PLAN_PRESETS = [
+  { key: 'pro', label: 'Pro $20', limit: 4_000_000 },
+  { key: 'max', label: 'Max $100', limit: 20_000_000 },
+] as const
+
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0)
 
 /** A bucket read back from the store, with anything that is not a count read as zero. */
@@ -154,11 +166,11 @@ export function parseTokens(text: string): number | null {
   return Number.isSafeInteger(n) ? n : null
 }
 
-/** A bar of `width` cells, `fraction` of them filled. */
-export function bar(fraction: number, width: number): string {
+/** A bar of `width` cells, `fraction` of them filled, as its filled and empty runs. */
+export function barParts(fraction: number, width: number): [string, string] {
   const w = Math.max(1, Math.floor(width))
   const filled = Math.max(0, Math.min(w, Math.round(fraction * w)))
-  return '█'.repeat(filled) + '░'.repeat(w - filled)
+  return ['█'.repeat(filled), '█'.repeat(w - filled)]
 }
 
 // --- settings ----------------------------------------------------------------------------------
@@ -218,6 +230,8 @@ export type Summary = {
   weekTotal: number
   today: number
   perDay: number
+  /** The limit spread evenly over the cycle's days; 0 with no limit. */
+  dailyAllowance: number
   /** The day the budget runs out at this pace, when that is before it renews. */
   runsOut: string | null
 }
@@ -265,6 +279,7 @@ export function summarize(s: Settings, days: Record<string, DayBucket>, today: s
     weekTotal: week.reduce((n, d) => n + d.count, 0),
     today: count(today),
     perDay,
+    dailyAllowance: s.limit > 0 ? s.limit / Math.max(1, daysBetween(start, end)) : 0,
     runsOut,
   }
 }
@@ -306,3 +321,49 @@ export function warningText(u: Summary): string {
   }
   return ''
 }
+
+// --- splash ------------------------------------------------------------------------------------
+
+/** Frames in the boot sequence the pane plays the first time `/tokens` opens it in a session. */
+export const SPLASH_FRAMES = 26
+/** Milliseconds per frame: ten a second, the rate every surface redraws a pane at. */
+export const SPLASH_TICK_MS = 100
+
+export const SPLASH_TITLE = 'T O K E N   W A T C H E R'
+const TYPE_FRAMES = 7
+const BARS_FROM = 4
+const RISE_FRAMES = 8
+
+/** The title typed out over the first frames: how much of it shows, and whether the cursor does. */
+export function splashTitle(frame: number): { text: string; cursor: boolean } {
+  const shown = Math.min(SPLASH_TITLE.length, Math.round((frame / TYPE_FRAMES) * SPLASH_TITLE.length))
+  const isTyping = shown < SPLASH_TITLE.length
+  return { text: SPLASH_TITLE.slice(0, shown), cursor: isTyping || frame % 4 < 2 }
+}
+
+const easeOut = (t: number) => 1 - (1 - t) ** 3
+
+/** How far day `i` (0 the oldest) of the seven has risen, 0 to 1: a wave, each a frame after the last. */
+export function splashRise(frame: number, i: number): number {
+  const t = (frame - BARS_FROM - i) / RISE_FRAMES
+  return easeOut(Math.max(0, Math.min(1, t)))
+}
+
+export type SplashStep = { label: string; isDone: boolean }
+
+const STEPS: [running: string, done: string, from: number, to: number][] = [
+  ['linking ledger', 'ledger linked', 2, 5],
+  ['syncing 7-day buffer', '7-day buffer synced', 5, BARS_FROM + 6 + RISE_FRAMES],
+  ['calibrating budget', 'budget calibrated', BARS_FROM + 6 + RISE_FRAMES, SPLASH_FRAMES - 5],
+]
+
+/** The steps shown by this frame: each in its running words, then its done words. */
+export function splashSteps(frame: number): SplashStep[] {
+  return STEPS.filter(([, , from]) => frame >= from).map(([running, done, , to]) => ({
+    label: frame >= to ? done : running,
+    isDone: frame >= to,
+  }))
+}
+
+/** How far along the boot is, 0 to 1: full a few frames before the end, so "ready" holds a moment. */
+export const splashProgress = (frame: number) => Math.max(0, Math.min(1, frame / (SPLASH_FRAMES - 5)))

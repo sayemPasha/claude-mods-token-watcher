@@ -13,10 +13,13 @@ import {
   COUNTING_LABELS,
   DEFAULTS,
   EMPTY_BUCKET,
+  PLAN_PRESETS,
+  SPLASH_FRAMES,
+  SPLASH_TICK_MS,
   WEEKDAYS,
   addBuckets,
   addDays,
-  bar,
+  barParts,
   countOf,
   cycleRange,
   dayKey,
@@ -25,6 +28,10 @@ import {
   parseTokens,
   pctText,
   shortDate,
+  splashProgress,
+  splashRise,
+  splashSteps,
+  splashTitle,
   statusText,
   summarize,
   toBucket,
@@ -53,6 +60,18 @@ const view = atom({ plugin: 'token-watcher', key: 'view' } as const, 'usage')
 const isBandHidden = atom({ plugin: 'token-watcher', key: 'isBandHidden' } as const, false)
 const isResetArmed = atom({ plugin: 'token-watcher', key: 'isResetArmed' } as const, false)
 const note = atom({ plugin: 'token-watcher', key: 'note' } as const, '')
+const splash = atom({ plugin: 'token-watcher', key: 'splash' } as const, -1)
+
+/** Plays the boot sequence once: a frame a tick, ending on the last; Skip jumps there. */
+async function playSplash($: Engine): Promise<void> {
+  await update($, splash, () => 0)
+  let frame = 0
+  const timer = $.clock.every(SPLASH_TICK_MS, () => {
+    frame += 1
+    if (frame >= SPLASH_FRAMES) timer.cancel()
+    void update($, splash, f => (f >= SPLASH_FRAMES ? f : frame))
+  })
+}
 
 // --- the ledger --------------------------------------------------------------------------------
 
@@ -185,6 +204,15 @@ async function setLimit($: Engine, text: string): Promise<string> {
   return said
 }
 
+/** Fills in a plan's rough weekly budget; the week keeps the start day already chosen. */
+async function applyPreset($: Engine, preset: (typeof PLAN_PRESETS)[number]): Promise<void> {
+  await save(
+    $,
+    { limit: preset.limit, cycle: 'week', counting: 'no-cache-read' },
+    `${preset.label}: about ${fmt(preset.limit)} tokens a week, all except cache reads (a rough figure for Opus at medium effort). Set the week to start on the day your Claude limit resets.`,
+  )
+}
+
 async function setRenewalDay($: Engine, text: string): Promise<void> {
   const day = Number(text.trim())
   if (!Number.isInteger(day) || day < 1 || day > 31) {
@@ -275,6 +303,8 @@ export const register: Register = on => {
       const { rateLimits } = await $.session.usage()
       await update($, snapshot, s => ({ ...s, windows: [...rateLimits] }))
       await prune($)
+      // A reload cancels the timer mid-play: don't leave the pane stuck on a frame.
+      await update($, splash, f => (f >= 0 && f < SPLASH_FRAMES ? SPLASH_FRAMES : f))
       await refresh($)
       // Other sessions spend from the same budget: read it again every minute.
       $.clock.every(REFRESH_MS, () => void refresh($).catch(() => undefined))
@@ -311,6 +341,9 @@ export const register: Register = on => {
     await update($, view, () => (/^settings\b/i.test(args) ? 'settings' : 'usage'))
     const u = await refresh($)
     const opened = await $.ui.open({ id: PANE, title: TITLE, columns: 50 })
+    if (opened.isPlaced && (await read($, view)) === 'usage' && (await read($, splash)) === -1) {
+      await playSplash($)
+    }
 
     return { text: opened.isPlaced ? statusText(u) : report(u, await read($, snapshot)) }
   })
@@ -360,6 +393,78 @@ export const register: Register = on => {
       </Box>
     )
 
+    // Filled run in the bar's colour, the rest as a muted track of the same glyph, so the bar
+    // reads as one even strip whatever its fill.
+    const meter = (fraction: number, width: number, color: string) => {
+      const [filled, empty] = barParts(fraction, width)
+      return (
+        <Box flexDirection="row">
+          {filled ? <Text color={color} mono>{filled}</Text> : null}
+          {empty ? <Text color="subtle" dimColor mono>{empty}</Text> : null}
+        </Box>
+      )
+    }
+
+    // --- splash ---
+    // One accent, no noise: the title types out, the real seven days rise in a wave, three quiet
+    // steps tick off and a thin line fills, then it settles on "ready".
+    const frame = await read($, splash)
+    if (shown === 'usage' && frame >= 0 && frame < SPLASH_FRAMES) {
+      const accent = 'suggestion'
+      const title = splashTitle(frame)
+      const progress = splashProgress(frame)
+      const rule = Math.max(16, Math.min(40, cols - 2))
+      const [lineDone, lineLeft] = barParts(progress, rule)
+      const peak = Math.max(1, ...u.week.map(d => d.count))
+      const numWidth = Math.max(1, ...u.week.map(d => fmt(d.count).length))
+      const width = Math.max(8, Math.min(Math.max(10, Math.min(30, cols - 10)), cols - numWidth - 10))
+      return (
+        <Box flexDirection="column">
+          <Box flexDirection="row">
+            <Text color={accent} weight="semibold" mono>{title.text}</Text>
+            {title.cursor ? <Text color={accent} dimColor mono>▌</Text> : null}
+          </Box>
+          <Text color="subtle" dimColor mono>{'─'.repeat(rule)}</Text>
+
+          <Box flexDirection="column" marginTop="md">
+            {u.week.map((d, i) => {
+              const rise = splashRise(frame, i)
+              return (
+                <Box key={`splash-day:${d.key}`} flexDirection="row" gap="sm">
+                  <Text dimColor={d.key !== s.today} mono>{weekRow(d.key)}</Text>
+                  {meter((d.count / peak) * rise, width, accent)}
+                  <Text dimColor mono>{(rise < 1 ? '' : d.count === 0 ? '–' : fmt(d.count)).padStart(numWidth)}</Text>
+                </Box>
+              )
+            })}
+          </Box>
+
+          <Box flexDirection="column" marginTop="md">
+            {splashSteps(frame).map(step => (
+              <Box key={`splash-step:${step.label}`} flexDirection="row" gap="sm">
+                <Text color={accent} dimColor={!step.isDone} mono>{step.isDone ? '✓' : '·'}</Text>
+                <Text dimColor={step.isDone}>{step.label}</Text>
+              </Box>
+            ))}
+          </Box>
+
+          <Box flexDirection="row" marginTop="md">
+            {lineDone ? <Text color={accent} mono>{'━'.repeat(lineDone.length)}</Text> : null}
+            {lineLeft ? <Text color="subtle" dimColor mono>{'─'.repeat(lineLeft.length)}</Text> : null}
+          </Box>
+          {progress >= 1 ? (
+            <Text>
+              {`ready · ${u.level === 'none' ? `${fmt(u.spent)} this cycle` : `${fmt(u.spent)} spent · ${pctText(u)} left`}`}
+            </Text>
+          ) : null}
+
+          <Box flexDirection="row" marginTop="md">
+            <Button key="splash-skip" label="Skip" onPress={() => void update($, splash, () => SPLASH_FRAMES)} />
+          </Box>
+        </Box>
+      )
+    }
+
     // --- settings ---
     if (shown === 'settings') {
       const armed = await read($, isResetArmed)
@@ -394,6 +499,12 @@ export const register: Register = on => {
           {said ? <Text color="suggestion">{said}</Text> : null}
 
           {heading('Budget')}
+          <Box flexDirection="row" gap="sm" alignItems="center">
+            <Text dimColor size="footnote">Fill in for a plan:</Text>
+            {PLAN_PRESETS.map(p => (
+              <Button key={`preset-${p.key}`} label={p.label} onPress={() => void applyPreset($, p)} />
+            ))}
+          </Box>
           <Input
             key="limit"
             label="Max tokens per cycle"
@@ -484,6 +595,9 @@ export const register: Register = on => {
     // --- usage ---
     const barWidth = Math.max(10, Math.min(30, cols - 10))
     const peak = Math.max(1, ...u.week.map(d => d.count))
+    const numWidth = Math.max(1, ...u.week.map(d => fmt(d.count).length))
+    // As wide as the budget bar, unless the label and figure beside it would no longer fit.
+    const weekBarWidth = Math.max(8, Math.min(barWidth, cols - numWidth - 10))
     const counted = s.settings.counting
     const kinds: [string, number, boolean][] = [
       ['Input', u.kinds.input, true],
@@ -510,7 +624,7 @@ export const register: Register = on => {
         ) : (
           <Box flexDirection="column">
             <Box flexDirection="row" gap="sm">
-              <Text color={tone} mono>{bar(u.pctLeft / 100, barWidth)}</Text>
+              {meter(u.pctLeft / 100, barWidth, tone)}
               <Text color={tone} weight="semibold">{`${pctText(u)} left`}</Text>
             </Box>
             <Text>{`Spent ${fmt(u.spent)} of ${fmt(u.limit)} · ${fmt(u.remaining)} left`}</Text>
@@ -520,14 +634,23 @@ export const register: Register = on => {
           </Box>
         )}
 
-        {heading('Last 7 days', `${fmt(u.weekTotal)} total`)}
-        {u.week.map(d => (
-          <Box key={`day:${d.key}`} flexDirection="row" gap="sm">
-            <Text dimColor={d.key !== s.today} mono>{weekRow(d.key)}</Text>
-            <Text color="suggestion" mono>{bar(d.count / peak, 12)}</Text>
-            <Text dimColor={d.count === 0} tabular>{fmt(d.count)}</Text>
-          </Box>
-        ))}
+        {heading('Last 7 days', `${fmt(u.weekTotal)} total · ${fmt(u.weekTotal / 7)}/day avg`)}
+        {u.week.map(d => {
+          const isToday = d.key === s.today
+          const over = u.dailyAllowance > 0 && d.count > u.dailyAllowance
+          return (
+            <Box key={`day:${d.key}`} flexDirection="row" gap="sm">
+              <Text dimColor={!isToday} weight={isToday ? 'bold' : 'regular'} mono>{weekRow(d.key)}</Text>
+              {meter(d.count / peak, weekBarWidth, over ? 'warning' : 'suggestion')}
+              <Text {...(over ? { color: 'warning' } : {})} dimColor={d.count === 0} weight={isToday ? 'bold' : 'regular'} mono>
+                {(d.count === 0 ? '–' : fmt(d.count)).padStart(numWidth)}
+              </Text>
+            </Box>
+          )
+        })}
+        {u.dailyAllowance > 0 ? (
+          <Text dimColor size="footnote">{`Daily allowance ${fmt(u.dailyAllowance)}; days over it show in amber.`}</Text>
+        ) : null}
         <Text>{`Today ${fmt(u.today)} · this session ${fmt(countOf(s.session, counted))} (${s.session.turns} ${s.session.turns === 1 ? 'turn' : 'turns'})`}</Text>
 
         {heading('By kind', 'this cycle')}

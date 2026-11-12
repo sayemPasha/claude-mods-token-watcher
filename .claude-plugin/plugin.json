@@ -1,6 +1,6 @@
 {
   "name": "token-watcher",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tracks token usage against a budget you set: spent, remaining, renewal, a settings panel, and warnings at 20% and 5% remaining",
   "types": "./types/index.d.ts"
 }

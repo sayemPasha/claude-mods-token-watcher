@@ -40,7 +40,7 @@ Choose the user scope when asked, and the mod is on in every session started aft
 
 ## First use
 
-1. Type `/tokens limit 50M` (or `2.5M`, `500k`, `1200000`), or open `/tokens settings` and fill in the limit.
+1. Type `/tokens limit 50M` (or `2.5M`, `500k`, `1200000`), or open `/tokens settings` and fill in the limit. Or press **Pro $20** or **Max $100** in settings: it fills in a rough weekly budget for that plan (4M or 20M tokens a week, counting all except cache reads), estimated for Opus at medium effort. Sonnet goes about twice as far, Fable about half.
 2. Set the renewal: monthly on a day of the month (a shorter month renews on its last day), or weekly from a weekday.
 
 | Command | What it does |

@@ -331,6 +331,24 @@ test('the settings view saves each change, and refuses what it cannot read', asy
   }
 })
 
+test('a plan button fills in a weekly budget and keeps the chosen week start', async ($, on) => {
+  const { status, store } = world(on, { settings: settings({ weekStart: 6, counting: 'all', renewalDay: 12 }) })
+  await start($)
+  await $.command.run({ command: 'tokens', args: 'settings', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+
+  await ui.press({ key: 'preset-max' })
+  expect(store.get('settings')).toEqual(
+    settings({ limit: 20_000_000, cycle: 'week', weekStart: 6, counting: 'no-cache-read', renewalDay: 12 }),
+  )
+  expect(await ui.find({ type: 'Text', text: /^Max \$100: about 20M tokens a week/ })).toBeDefined()
+  expect(status.at(-1)).toBe('Tokens 0 / 20M · 100% left · renews in 4d')
+
+  await ui.press({ key: 'preset-pro' })
+  expect((store.get('settings') as Settings).limit).toBe(4_000_000)
+  await ui.unmount()
+})
+
 test('settings copy to the clipboard and paste back on another PC', async ($, on) => {
   const mine = settings({ limit: 7_000_000, renewalDay: 12, counting: 'io' })
   const { copied, store } = world(on, { settings: mine })
@@ -391,4 +409,54 @@ test('/tokens limit sets the limit, and /tokens answers in text where no pane is
       'Claude account, 7-day: 41% used · resets in 3h 0m',
     ].join('\n'),
   )
+})
+
+test('the first /tokens of a session plays the boot sequence once, and Skip ends it', async ($, on) => {
+  const { clock } = world(on, { settings: settings({ limit: 50_000_000 }) })
+  await start($)
+  const open = () =>
+    $.command.run({ command: 'tokens', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+
+  await open()
+  for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    expect(await ui.find({ key: 'splash-skip' })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Spent/ })).toBeUndefined()
+    await ui.unmount()
+  }
+
+  // Part way: the ledger is linked, the days are still rising, and it is not ready yet.
+  await clock.advance(1_000)
+  let ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^ledger linked$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^syncing 7-day buffer$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ready/ })).toBeUndefined()
+  await ui.unmount()
+
+  // Near the end it is ready, with the figures, then gives way to the pane.
+  await clock.advance(1_300)
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^budget calibrated$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ready · 0 spent · 100% left$/ })).toBeDefined()
+  await ui.unmount()
+  await clock.advance(1_000)
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^Spent/ })).toBeDefined()
+  await ui.unmount()
+
+  // Opened again in the same session, it goes straight to the figures.
+  await open()
+  ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'splash-skip' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('Skip goes straight to the figures', async ($, on) => {
+  world(on)
+  await start($)
+  await $.command.run({ command: 'tokens', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await ui.press({ key: 'splash-skip' })
+  expect(await ui.find({ type: 'Text', text: /No limit is set/ })).toBeDefined()
+  await ui.unmount()
 })

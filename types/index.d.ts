@@ -57,6 +57,11 @@ declare module 'claude-code' {
       isResetArmed: boolean
       /** The last thing the settings view has to say: what was saved, or why not. */
       note: string
+      /**
+       * The boot sequence's frame: -1 before it has played this session, 0 up to the last frame
+       * while it plays, and the frame count once it has played or was skipped.
+       */
+      splash: number
     }
   }
 }
