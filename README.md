@@ -4,6 +4,10 @@
 
 A Claude Code mod that counts the tokens your sessions use against a budget you set, and warns you before it runs out.
 
+<p align="center">
+  <img src="docs/pane.png" alt="The /tokens pane in VS Code: a budget bar at 72% left with 1.1M of 4M spent and a weekly renewal in 2 days, the last 7 days as bars with the day over its daily allowance in amber, today's and this session's counts, and the breakdown by token kind" width="276">
+</p>
+
 - **Status line** under the prompt in every session: `Tokens 12.4M / 50M · 75% left · renews in 12d`
 - **`/tokens`** opens a pane with the figures: spent, remaining, renewal date, the last 7 days, today, this session, the pace and when the budget would run out, a breakdown by token kind, and Claude's own 5-hour and 7-day account limits
 - **Settings view** in the same pane: the limit, monthly or weekly renewal, what counts, and the warning thresholds

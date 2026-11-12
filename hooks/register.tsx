@@ -45,6 +45,20 @@ import type { Level, Summary } from './lib'
 type Engine = EngineInterface
 
 const PANE = 'token-watcher'
+
+/** Amber, as a color of its own: VS Code draws the `warning` theme key as plain grey. */
+const AMBER = '#E5A93A'
+
+// The plugin icon (assets/icon.svg) for the pane's heading: the gauge and its bars, without the
+// background, the glow or the provenance metadata, so it sits on the pane's own colour.
+const ICON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="80 120 864 820">' +
+  '<path d="M257.4 810.6 A360 360 0 1 1 766.6 810.6" fill="none" stroke="#5A6173" stroke-width="96" stroke-linecap="round"/>' +
+  '<path d="M257.4 810.6 A360 360 0 1 1 803.2 344.4" fill="none" stroke="#7C8CF8" stroke-width="96" stroke-linecap="round"/>' +
+  '<rect x="388" y="584" width="56" height="100" rx="16" fill="#5A6173"/>' +
+  '<rect x="484" y="514" width="56" height="170" rx="16" fill="#5A6173"/>' +
+  '<rect x="580" y="434" width="56" height="250" rx="16" fill="#7C8CF8"/>' +
+  '</svg>'
 const TITLE = 'Tokens'
 const REFRESH_MS = 60_000
 /** Months of history kept in the store. */
@@ -259,7 +273,7 @@ function resetCycle($: Engine): Promise<void> {
 const TONE: Record<Level, string> = {
   none: 'subtle',
   ok: 'success',
-  warn: 'warning',
+  warn: AMBER,
   critical: 'error',
   out: 'error',
 }
@@ -375,7 +389,11 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Button, Input, Select, Text } = $.ui.resolve(e)
+    const elements = $.ui.resolve(e)
+    const { Box, Button, Input, Select, Text } = elements
+    // Svg is drawn by VS Code, the desktop app and mobile; the terminal has none.
+    const Svg = 'Svg' in elements ? elements.Svg : undefined
+    const svg = Svg ? (props: { source: string; alt: string; width: number; height: number }) => <Svg {...props} /> : undefined
     const s = await read($, snapshot)
     const shown = await read($, view)
     const cols = Math.max(24, e.props.bodyColumns)
@@ -431,7 +449,9 @@ export const register: Register = on => {
               const rise = splashRise(frame, i)
               return (
                 <Box key={`splash-day:${d.key}`} flexDirection="row" gap="sm">
-                  <Text dimColor={d.key !== s.today} mono>{weekRow(d.key)}</Text>
+                  <Box width={7} flexShrink={0}>
+                    <Text dimColor={d.key !== s.today} mono>{weekRow(d.key)}</Text>
+                  </Box>
                   {meter((d.count / peak) * rise, width, accent)}
                   <Text dimColor mono>{(rise < 1 ? '' : d.count === 0 ? '–' : fmt(d.count)).padStart(numWidth)}</Text>
                 </Box>
@@ -609,10 +629,24 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         <Box flexDirection="row" justifyContent="space-between" alignItems="center">
-          <Text size="heading" weight="semibold">Token budget</Text>
+          <Box flexDirection="row" gap="sm" alignItems="center">
+            {svg ? svg({ source: ICON_SVG, alt: 'Token Watcher', width: 22, height: 21 }) : null}
+            <Text size="heading" weight="semibold">Token budget</Text>
+          </Box>
           <Box flexDirection="row" gap="sm">
-            <Button key="settings" label="Settings" variant={u.level === 'none' ? 'primary' : 'secondary'} onPress={() => void update($, view, () => 'settings')} />
-            <Button key="refresh" label="Refresh" onPress={() => void refresh($)} />
+            {/* Icon buttons: a Button can hold only text, so the icon is a text glyph (\uFE0E asks
+                for its plain form, not the emoji) and the label stays the control's name. With no
+                limit set, Settings stays a full button: it is the next thing to press. */}
+            {u.level === 'none' ? (
+              <Button key="settings" label="Settings" variant="primary" onPress={() => void update($, view, () => 'settings')} />
+            ) : (
+              <Button key="settings" label="Settings" plain dimColor onPress={() => void update($, view, () => 'settings')}>
+                <Text size="heading">{'⚙\uFE0E'}</Text>
+              </Button>
+            )}
+            <Button key="refresh" label="Refresh" plain dimColor onPress={() => void refresh($)}>
+              <Text size="heading">↻</Text>
+            </Button>
           </Box>
         </Box>
 
@@ -630,7 +664,7 @@ export const register: Register = on => {
             <Text>{`Spent ${fmt(u.spent)} of ${fmt(u.limit)} · ${fmt(u.remaining)} left`}</Text>
             <Text dimColor>{`Renews ${shortDate(u.end)} (${u.daysLeft <= 1 ? 'tomorrow' : `in ${u.daysLeft} days`}) · ${s.settings.cycle === 'week' ? 'weekly' : 'monthly'}`}</Text>
             {u.level === 'ok' ? null : <Text color={tone}>{warningText(u)}</Text>}
-            {u.spent > 0 && u.level !== 'out' ? <Text color={u.runsOut ? 'warning' : 'subtle'}>{pace(u)}</Text> : null}
+            {u.spent > 0 && u.level !== 'out' ? <Text color={u.runsOut ? AMBER : 'subtle'}>{pace(u)}</Text> : null}
           </Box>
         )}
 
@@ -640,9 +674,11 @@ export const register: Register = on => {
           const over = u.dailyAllowance > 0 && d.count > u.dailyAllowance
           return (
             <Box key={`day:${d.key}`} flexDirection="row" gap="sm">
-              <Text dimColor={!isToday} weight={isToday ? 'bold' : 'regular'} mono>{weekRow(d.key)}</Text>
-              {meter(d.count / peak, weekBarWidth, over ? 'warning' : 'suggestion')}
-              <Text {...(over ? { color: 'warning' } : {})} dimColor={d.count === 0} weight={isToday ? 'bold' : 'regular'} mono>
+              <Box width={7} flexShrink={0}>
+                <Text dimColor={!isToday} weight={isToday ? 'bold' : 'regular'} mono>{weekRow(d.key)}</Text>
+              </Box>
+              {meter(d.count / peak, weekBarWidth, over ? AMBER : 'suggestion')}
+              <Text {...(over ? { color: AMBER } : {})} dimColor={d.count === 0} weight={isToday ? 'bold' : 'regular'} mono>
                 {(d.count === 0 ? '–' : fmt(d.count)).padStart(numWidth)}
               </Text>
             </Box>
@@ -663,7 +699,7 @@ export const register: Register = on => {
 
         {s.windows.length > 0 ? heading('Claude account limits', 'all your devices') : null}
         {s.windows.map(w => (
-          <Text key={`window:${w.kind}`} color={w.percentUsed >= 95 ? 'error' : w.percentUsed >= 80 ? 'warning' : 'text'}>
+          <Text key={`window:${w.kind}`} color={w.percentUsed >= 95 ? 'error' : w.percentUsed >= 80 ? AMBER : 'text'}>
             {windowLine(w, s.at)}
           </Text>
         ))}

@@ -460,3 +460,24 @@ test('Skip goes straight to the figures', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /No limit is set/ })).toBeDefined()
   await ui.unmount()
 })
+
+test('the pane heading carries the plugin icon where the surface draws SVG', async ($, on) => {
+  world(on, { settings: settings({ limit: 4_000_000 }) })
+  await start($)
+  for (const surface of ['terminal', 'vscode'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    // Settings and Refresh are glyph buttons once a limit is set, still named by their words.
+    expect((await ui.find({ key: 'settings' }))?.text).toBe('⚙\uFE0E')
+    expect((await ui.find({ key: 'refresh' }))?.text).toBe('↻')
+    await ui.unmount()
+  }
+  for (const surface of ['desktop', 'vscode'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    expect(await ui.find({ type: 'Svg' })).toBeDefined()
+    await ui.unmount()
+  }
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Token budget' })).toBeDefined()
+  await ui.unmount()
+})
