@@ -4,3 +4,6 @@
 
 .DS_Store
 *.log
+
+# Design hand-off bundle; the assets in use are in assets/ and .claude-plugin/icon.png
+token-watcher-icon.zip

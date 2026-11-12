@@ -1,3 +1,5 @@
+![Token Watcher: know where your token budget stands](assets/social-preview.png)
+
 # Token Watcher
 
 A Claude Code mod that counts the tokens your sessions use against a budget you set, and warns you before it runs out.
@@ -50,6 +52,23 @@ Choose the user scope when asked, and the mod is on in every session started aft
 | `/tokens limit 50M` | Sets the limit without opening anything |
 
 ## Settings
+
+Open them with `/tokens settings`, or with **Settings** at the top of the `/tokens` pane. Every change is saved as you make it, for every session on this PC.
+
+<img src="docs/settings.png" alt="The Token budget settings pane: plan buttons Pro $20 and Max $100, the max tokens per cycle field, renewal, week start, what counts, warning thresholds, reset, and copy and paste for another PC" width="409">
+
+**Setting up for a Claude subscription:**
+
+1. Under **Budget**, press **Pro $20** or **Max $100**. That fills in a rough weekly budget (4M or 20M tokens), sets **Renews** to every week, and **What counts** to all except cache reads.
+2. Set **Week starts on** to the day your Claude weekly limit resets. Claude's `/usage` shows it ("Resets Sat, …").
+3. Leave the warnings at 20% and 5%, or type your own and press **save**.
+
+The plan figures are estimates for Opus at medium effort. Sonnet goes about twice as far, and Fable about half as far. To set your own figure, type it into **Max tokens per cycle** (for example `15M`) and press **save**.
+
+The rest of the view:
+
+- **This cycle → Reset this cycle's count** starts the count over from now. It asks for a second press first.
+- **Another PC → Copy settings** copies them as text. Paste that into **Paste settings** on the other PC and press **apply**.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
