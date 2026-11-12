@@ -100,3 +100,7 @@ claude plugin test .       # tests/watcher.test.tsx
 - `types/index.d.ts`: the settings, the ledger and the state contract
 
 After an edit, `/reload-plugins` in a running session picks it up when the mod was installed from this folder.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
